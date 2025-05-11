@@ -1,8 +1,0 @@
-names:
-  0: walkable_area
-  1: obstacle
-  2: human
-  
-path: .
-train: dataset/train.txt
-val: dataset/val.txt
