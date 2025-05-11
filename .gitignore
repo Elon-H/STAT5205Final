@@ -19,3 +19,4 @@ runs/train-seg/exp8/weights
 __pycache__/
 *.py[cod]
 *$py.class
+.ipynb_checkpoints/
