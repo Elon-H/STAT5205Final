@@ -33,6 +33,9 @@ import os
 import platform
 import sys
 from pathlib import Path
+import io
+from PIL import Image
+import IPython
 
 import torch
 
@@ -64,6 +67,13 @@ from utils.general import (
 )
 from utils.segment.general import masks2segments, process_mask, process_mask_native
 from utils.torch_utils import select_device, smart_inference_mode
+
+
+def show_array(a, fmt='jpeg'):
+    """Display array in Jupyter cell output using ipython widget."""
+    f = io.BytesIO()
+    Image.fromarray(a).save(f, fmt)
+    display(IPython.display.Image(data=f.getvalue()))
 
 
 @smart_inference_mode()
@@ -217,13 +227,19 @@ def run(
             # Stream results
             im0 = annotator.result()
             if view_img:
-                if platform.system() == "Linux" and p not in windows:
-                    windows.append(p)
-                    cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
-                    cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
-                cv2.imshow(str(p), im0)
-                if cv2.waitKey(1) == ord("q"):  # 1 millisecond
-                    exit()
+                try:
+                    # Try to show in Jupyter
+                    show_array(im0)
+                    IPython.display.clear_output(wait=True)
+                except:
+                    # Fallback to cv2.imshow
+                    if platform.system() == "Linux" and p not in windows:
+                        windows.append(p)
+                        cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+                        cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
+                    cv2.imshow(str(p), im0)
+                    if cv2.waitKey(1) == ord("q"):
+                        exit()
 
             # Save results (image with detections)
             if save_img:
