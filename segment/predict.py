@@ -36,6 +36,27 @@ from pathlib import Path
 import io
 from PIL import Image
 import IPython
+import cv2 
+
+try:
+    # Try importing the necessary display functions from IPython
+    from IPython.display import display, Image as IPImage, clear_output
+    _IPYTHON_DISPLAY_AVAILABLE = True
+    # You might want to add a check here to see if you are actually in an IPython kernel
+    # def is_ipython():
+    #     try:
+    #         __IPYTHON__
+    #         return True
+    #     except NameError:
+    #         return False
+    # _IPYTHON_DISPLAY_AVAILABLE = is_ipython() # Uncomment for stricter check
+except ImportError:
+    _IPYTHON_DISPLAY_AVAILABLE = False
+    # Define dummy functions if IPython is not available to avoid errors later
+    # if code accidentally tries to call them when unavailable.
+    def display(*args, **kwargs): pass
+    def clear_output(*args, **kwargs): pass
+    class IPImage: pass
 
 import torch
 
@@ -71,9 +92,18 @@ from utils.torch_utils import select_device, smart_inference_mode
 
 def show_array(a, fmt='jpeg'):
     """Display array in Jupyter cell output using ipython widget."""
+    if not _IPYTHON_DISPLAY_AVAILABLE:
+        # Safeguard: this shouldn't be called if the logic below is correct
+        LOGGER.warning("IPython display is not available. Cannot show image in cell.")
+        return
+    # Convert BGR (OpenCV default) to RGB (PIL/IPython default) before displaying
+    # Check if it's a 3-channel image first
+    if len(a.shape) == 3 and a.shape[2] == 3:
+         a = cv2.cvtColor(a, cv2.COLOR_BGR2RGB)
     f = io.BytesIO()
     Image.fromarray(a).save(f, fmt)
-    display(IPython.display.Image(data=f.getvalue()))
+    display(IPImage(data=f.getvalue())) # Use the imported display and IPImage
+
 
 
 @smart_inference_mode()
@@ -130,7 +160,7 @@ def run(
     # Dataloader
     bs = 1  # batch_size
     if webcam:
-        view_img = check_imshow(warn=True)
+        view_img = check_imshow(warn=False)
         dataset = LoadStreams(source, img_size=imgsz, stride=stride, auto=pt, vid_stride=vid_stride)
         bs = len(dataset)
     elif screenshot:
@@ -141,7 +171,7 @@ def run(
 
     # Run inference
     model.warmup(imgsz=(1 if pt else bs, 3, *imgsz))  # warmup
-    seen, windows, dt = 0, [], (Profile(device=device), Profile(device=device), Profile(device=device))
+    seen, dt = 0, (Profile(device=device), Profile(device=device), Profile(device=device))
     for path, im, im0s, vid_cap, s in dataset:
         with dt[0]:
             im = torch.from_numpy(im).to(model.device)
@@ -226,20 +256,17 @@ def run(
 
             # Stream results
             im0 = annotator.result()
-            if view_img:
-                try:
-                    # Try to show in Jupyter
+            if view_img: # Check if display is requested
+                if _IPYTHON_DISPLAY_AVAILABLE:
+                    # Use the defined show_array function (handles BGR->RGB conversion)
                     show_array(im0)
-                    IPython.display.clear_output(wait=True)
-                except:
-                    # Fallback to cv2.imshow
-                    if platform.system() == "Linux" and p not in windows:
-                        windows.append(p)
-                        cv2.namedWindow(str(p), cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
-                        cv2.resizeWindow(str(p), im0.shape[1], im0.shape[0])
-                    cv2.imshow(str(p), im0)
-                    if cv2.waitKey(1) == ord("q"):
-                        exit()
+                    clear_output(wait=True) # Use the imported clear_output
+                else:
+                    # If not in IPython or display unavailable, print a message.
+                    # Avoid calling cv2.imshow() here to prevent the warning in notebooks.
+                    # Print only once or occasionally to avoid flooding output.
+                    if seen % 30 == 1: # Example: print every 30 frames
+                         LOGGER.warning("IPython display not available. Live view disabled in this environment.")
 
             # Save results (image with detections)
             if save_img:
